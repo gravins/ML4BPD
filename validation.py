@@ -5,6 +5,8 @@ from sklearn.metrics import f1_score, roc_auc_score
 import json
 import threading
 
+from dask.diagnostics import ProgressBar
+import dask_searchcv as dcv
 
 def fit_and_result(estimator, x_tr, y_tr, x_val, y_val, params, result, f=None):
     """
@@ -167,14 +169,14 @@ def run_gridsearch(X, y, clf, param_grid, cv=5, n_jobs=3):
     :param cv: fold of cross-validation, default 5
     :return top_params: [dict] from report()
     """
-    grid_search = GridSearchCV(clf,
-                               scoring="roc_auc",
-                               param_grid=param_grid,
-                               cv=cv, n_jobs=n_jobs)
+    grid_search = dcv.GridSearchCV(clf,
+                        scoring="roc_auc",
+                        param_grid=param_grid,
+                        cv=cv, n_jobs=n_jobs)
+    with ProgressBar():
+            gs = grid_search.fit(X, y)
 
-    gs = grid_search.fit(X, y)
-
-    top_params = report(grid_search.cv_results_, 3)
+    top_params = report(grid_search.cv_results_, 5)
 
     return top_params
 
@@ -190,14 +192,15 @@ def run_randomsearch(X, y, clf, param_dist, cv=5, n_iter_search=20, n_jobs=3):
     :param n_iter_search: number of random parameter sets to try, default 20.
     :return top_params: [dict] from report()
     """
-    random_search = RandomizedSearchCV(clf,
-                                       scoring="roc_auc",
-                                        param_distributions=param_dist,
-                                        n_iter=n_iter_search,
-                                        cv= cv, n_jobs=n_jobs, random_state=42)
+    random_search = dcv.RandomizedSearchCV(clf,
+                        scoring="roc_auc",
+                        param_distributions=param_dist,
+                        n_iter=n_iter_search,
+                        cv=cv, n_jobs=n_jobs,
+                        random_state=42)
+    with ProgressBar():
+        rs = random_search.fit(X, y)
 
-    rs = random_search.fit(X, y)
-
-    top_params = report(random_search.cv_results_, 3)
+    top_params = report(random_search.cv_results_, 5)
 
     return top_params

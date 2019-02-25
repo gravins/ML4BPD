@@ -15,7 +15,7 @@ def main():
         raise Warning("\n\tYou must pass one and only one arguments now, this buggy version of Scikit-Learn pop from empty warning list.\n\tPlease specify the model to use:\n\t\tLR for logistic regression\n\t\tDT for decision tree\n\t\tRF for random forest\n\t\tGB for gradient boosting tree")
         exit(1)
     if not ("DT" in sys.argv[1] or "RF" in sys.argv[1] or "LR" in sys.argv[1] or "GB" in sys.argv[1]):
-        raise Warning("Please specify the model to use:\n\t\tLR for logistic regression\n\t\tDT for decision tree\n\t\tRF for random forest\n\t\tGB for gradient boosting tree")
+        raise Warning("Please specify the model to use:\n\t\tLR for logistic regression\n\t\tDT for decision tree\n\t\tRF for random forest\n\t\tGB for gradient boosting tree\n\t\tSVM for support vector machine")
         exit(1)
 
     start = time()
@@ -45,7 +45,7 @@ def main():
         db = db.drop(db[pd.isnull(db[c])].index).reset_index(drop=True)
 
     # Drop gadays and insert into gaweeks
-    db["gaweeks"] = db["gaweeks"].astype(float) # cast entire column to float
+    db["gaweeks"] = db["gaweeks"].asclassifier_type(float) # cast entire column to float
     for i in range(0, len(db)):
         db.at[i, "gaweeks"] = round(db.at[i, "gaweeks"] + (db.at[i, "gadays"] / 7), 4) # round to 4 decimals
     db = db.drop(["gadays"], 1)
@@ -116,13 +116,13 @@ def main():
     tr_set, ts_set = parser.splitFrom(db, "byear", 2015)
 
 
-    def threaded_function(type, features, name, n_job=-1):
+    def threaded_function(classifier_type, features, name, n_job=-1):
         x_tr = tr_set[features]
         y_tr = tr_set[target].tolist()
         x_ts = ts_set[features]
         y_ts = ts_set[target].tolist()
 
-        if "RF" in type:
+        if "RF" in classifier_type:
             rfc = RandomForestClassifier(n_jobs=n_job, random_state=42)
             # dict of params for grid search
             param_grid_rf = {"n_estimators": [10, 500, 1000],
@@ -141,62 +141,76 @@ def main():
             else:
                 res = csf.classification(rfc, param_grid_rf, x_tr, y_tr, x_ts, y_ts, name, valid=True, n_job=n_job)["valid"]
 
-        else:
-            if "DT" in type:
-                dtc = DecisionTreeClassifier(random_state=42)
-                # dict of params for grid search
-                param_grid_dtc = {"criterion": ["gini", "entropy"],
-                                  "max_depth": [None, 3, 8, 13],
-                                  "min_samples_split": [2, 10, 30],
-                                  "min_samples_leaf": [1, 10, 20],
-                                  "class_weight": ["balanced", None],
-                                  "splitter": ["best", "random"]
-                                  }
+        elif "DT" in classifier_type:
+            dtc = DecisionTreeClassifier(random_state=42)
+            # dict of params for grid search
+            param_grid_dtc = {"criterion": ["gini", "entropy"],
+                              "max_depth": [None, 3, 8, 13],
+                              "min_samples_split": [2, 10, 30],
+                              "min_samples_leaf": [1, 10, 20],
+                              "class_weight": ["balanced", None],
+                              "splitter": ["best", "random"]
+                              }
 
-                if "tard" in name:
-                    # r = csf.classification(dtc, param_grid_dtc, x_tr, y_tr, x_ts, y_ts, name, valid=0.20)
-                    # __classification return a dictionary
-                    res = csf.classification(dtc, param_grid_dtc, x_tr, y_tr, x_ts, y_ts, name, valid=True, n_job=n_job)["valid"]
-                else:
-                    res = csf.classification(dtc, param_grid_dtc, x_tr, y_tr, x_ts, y_ts, name, valid=True, n_job=n_job)["valid"]
+            if "tard" in name:
+                # r = csf.classification(dtc, param_grid_dtc, x_tr, y_tr, x_ts, y_ts, name, valid=0.20)
+                # __classification return a dictionary
+                res = csf.classification(dtc, param_grid_dtc, x_tr, y_tr, x_ts, y_ts, name, valid=True, n_job=n_job)["valid"]
             else:
-                if "LR" in type:
-                    # Normalize all variable
-                    scaler = StandardScaler()
-                    scaled_df = scaler.fit_transform(x_tr)
-                    x_tr = pd.DataFrame(scaled_df, columns=x_tr.columns)
+                res = csf.classification(dtc, param_grid_dtc, x_tr, y_tr, x_ts, y_ts, name, valid=True, n_job=n_job)["valid"]
+        elif "LR" in classifier_type:
+            # Normalize all variable
+            scaler = StandardScaler()
+            scaled_df = scaler.fit_transform(x_tr)
+            x_tr = pd.DataFrame(scaled_df, columns=x_tr.columns)
 
-                    lr = LogisticRegression()
+            lr = LogisticRegression()
 
-                    # dict of params for grid search
-                    param_grid_lr = {"penalty": ["l1", "l2"],
-                                     "C": np.logspace(-5, 4, 10)
-                                     }
+            # dict of params for grid search
+            param_grid_lr = {"penalty": ["l1", "l2"],
+                             "C": np.logspace(-5, 4, 10)
+                             }
 
-                    if "tard" in name:
-                        # r = csf.classification(lr, param_grid_lr, x_tr, y_tr, x_ts, y_ts, name, valid=0.20)
-                        # __classification return a dictionary
-                        res = csf.classification(lr, param_grid_lr, x_tr, y_tr, x_ts, y_ts, name, valid=True, n_job=n_job)["valid"]
-                    else:
-                        res = csf.classification(lr, param_grid_lr, x_tr, y_tr, x_ts, y_ts, name, valid=True, n_job=n_job)["valid"]
-                else:
-                    if "GB" in type:
-                        gbc = GradientBoostingClassifier(random_state=42)
-                        # dict of params for grid search
-                        param_grid_gb = {"loss": ["deviance", "exponential"],
-                                         "n_estimators": [10, 100, 500],
-                                         "learning_rate": np.logspace(-5, 4, 10),
-                                         "criterion": ["friedman_mse", "mae"],
-                                         "max_depth": [None, 3, 7, 13],
-                                         "subsample": [0.5, 0.6, 0.7, 0.8, 0.9]
-                                         }
+            if "tard" in name:
+                # r = csf.classification(lr, param_grid_lr, x_tr, y_tr, x_ts, y_ts, name, valid=0.20)
+                # __classification return a dictionary
+                res = csf.classification(lr, param_grid_lr, x_tr, y_tr, x_ts, y_ts, name, valid=True, n_job=n_job)["valid"]
+            else:
+                res = csf.classification(lr, param_grid_lr, x_tr, y_tr, x_ts, y_ts, name, valid=True, n_job=n_job)["valid"]
+        elif "GB" in classifier_type:
+            gbc = GradientBoostingClassifier(random_state=42)
+            # dict of params for grid search
+            param_grid_gb = {"loss": ["deviance", "exponential"],
+                             "n_estimators": [10, 100, 500],
+                             "learning_rate": np.logspace(-5, 4, 10),
+                             "criterion": ["friedman_mse", "mae"],
+                             "max_depth": [None, 3, 7, 13],
+                             "subsample": [0.5, 0.6, 0.7, 0.8, 0.9]
+                             }
 
-                        if "tard" in name:
-                            # gbc = csf.classification(rfc, param_grid_rf, x_tr, y_tr, x_ts, y_ts, name, valid=0.20)
-                            # __classification return a dictionary
-                            res = csf.classification(gbc, param_grid_gb, x_tr, y_tr, x_ts, y_ts, name, valid=True, n_job=n_job)["valid"]
-                        else:
-                            res = csf.classification(gbc, param_grid_gb, x_tr, y_tr, x_ts, y_ts, name, valid=True, n_job=n_job)["valid"]
+            if "tard" in name:
+                # gbc = csf.classification(rfc, param_grid_rf, x_tr, y_tr, x_ts, y_ts, name, valid=0.20)
+                # __classification return a dictionary
+                res = csf.classification(gbc, param_grid_gb, x_tr, y_tr, x_ts, y_ts, name, valid=True, n_job=n_job)["valid"]
+            else:
+                res = csf.classification(gbc, param_grid_gb, x_tr, y_tr, x_ts, y_ts, name, valid=True, n_job=n_job)["valid"]
+        elif "SVM" in classifier_type:
+            gbc = SVC(random_state=42)
+            # dict of params for grid search
+            param_grid_gb = {"C": [0.001, 0.1, 0.5, 1.0],
+                "gamma":["auto"],
+                "kernel": ["linear", "poly", "rbf", "sigmoid"],
+                "degree": [1, 3, 4],
+                "shrinking": [True, False]
+                }
+
+            if "tard" in name:
+                # gbc = csf.classification(rfc, param_grid_rf, x_tr, y_tr, x_ts, y_ts, name, valid=0.20)
+                # __classification return a dictionary
+                res = csf.classification(gbc, param_grid_gb, x_tr, y_tr, x_ts, y_ts, name, valid=True, n_job=n_job)["valid"]
+            else:
+                res = csf.classification(gbc, param_grid_gb, x_tr, y_tr, x_ts, y_ts, name, valid=True, n_job=n_job)["valid"]
+
         print(res)
 
     if "LR" in sys.argv[1]:
@@ -227,6 +241,13 @@ def main():
         t1_GB.start()
         t2_GB.join()
         t1_GB.join()
+    elif "SVM" in sys.argv[1]:
+        t2_SVM = Thread(target=threaded_function, args=("SVM", features_precoci, "precoci"))
+        t1_SVM = Thread(target=threaded_function, args=("SVM", features_precoci_tardivi, "precoci_tardivi"))
+        t2_SVM.start()
+        t1_SVM.start()
+        t2_SVM.join()
+        t1_SVM.join()
 
 
     m, s = divmod(time() - start, 60)
